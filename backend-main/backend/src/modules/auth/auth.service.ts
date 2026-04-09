@@ -10,12 +10,15 @@ export class AuthService {
     fullName: string;
     role: 'admin' | 'candidate';
   }) {
+    console.debug(`[AUTH] Register attempt: email=${data.email}, role=${data.role}`);
+
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
       where: { email: data.email },
     });
 
     if (existingUser) {
+      console.debug(`[AUTH] Register failed: email already exists`);
       throw new AppError(400, 'USER_EXISTS', 'User with this email already exists');
     }
 
@@ -56,15 +59,18 @@ export class AuthService {
     });
 
     if (!user) {
+      console.debug(`[AUTH] Login failed: no user found for email=${email}`);
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
     }
 
     if (!user.isActive) {
+      console.debug(`[AUTH] Login failed: account disabled for email=${email}`);
       throw new AppError(403, 'ACCOUNT_DISABLED', 'Account is disabled');
     }
 
     // Verify password
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+    console.debug(`[AUTH] Password check for ${email}: ${isValidPassword ? 'valid' : 'invalid'}`);
 
     if (!isValidPassword) {
       throw new AppError(401, 'INVALID_CREDENTIALS', 'Invalid email or password');
