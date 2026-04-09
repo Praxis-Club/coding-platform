@@ -403,11 +403,17 @@ export class SubmissionsService extends EventEmitter {
   }
 
   async runCode(language: string, code: string, input: string) {
+    // ── TEMPORARY EXECUTION — NO DB WRITE ─────────────────────────────────
+    // This is called by POST /run. Code is executed in sandbox and result
+    // is returned directly. Nothing is persisted to the database.
     const result = await this.executeWithInputCompatibility(language as Language, code, input);
     return result;
   }
 
   async runAllTestCases(data: { questionId: string; language: string; code: string }) {
+    // ── TEMPORARY EXECUTION — NO DB WRITE ─────────────────────────────────
+    // Called by POST /run-all. Runs against all test cases for preview only.
+    // Results are returned in-memory. Nothing is stored.
     const question = await prisma.question.findUnique({
       where: { id: data.questionId },
       include: { testCases: true },
