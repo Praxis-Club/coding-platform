@@ -7,6 +7,7 @@ import { Dashboard } from './pages/Dashboard';
 import { Questions } from './pages/admin/Questions';
 import { CreateQuestion } from './pages/admin/CreateQuestion';
 import { Assessments } from './pages/admin/Assessments';
+import { Analytics } from './pages/admin/Analytics';
 import { Settings } from './pages/admin/Settings';
 
 import { Practice } from './pages/candidate/Practice';
@@ -15,13 +16,21 @@ import { Submissions } from './pages/candidate/Submissions';
 
 const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen bg-slate-950 text-slate-400">Loading…</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-base">
+      <div className="w-8 h-8 border-2 border-[var(--border-default)] border-t-accent rounded-full animate-spin" />
+    </div>
+  );
   return user ? <>{children}</> : <Navigate to="/login" />;
 };
 
 const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
-  if (loading) return <div className="flex items-center justify-center h-screen bg-slate-950 text-slate-400">Loading…</div>;
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen bg-base">
+      <div className="w-8 h-8 border-2 border-[var(--border-default)] border-t-accent rounded-full animate-spin" />
+    </div>
+  );
   if (!user) return <Navigate to="/login" />;
   if (user.role !== 'admin') return <Navigate to="/" />;
   return <>{children}</>;
@@ -43,6 +52,7 @@ function AppRoutes() {
         <Route path="/admin/questions/:id/edit" element={<AdminRoute><CreateQuestion /></AdminRoute>} />
         <Route path="/admin/assessments" element={<AdminRoute><Assessments /></AdminRoute>} />
         <Route path="/admin/assessments/create" element={<Navigate to="/admin/assessments" replace />} />
+        <Route path="/admin/analytics" element={<AdminRoute><Analytics /></AdminRoute>} />
         <Route path="/admin/settings" element={<AdminRoute><Settings /></AdminRoute>} />
 
 

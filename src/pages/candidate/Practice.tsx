@@ -4,113 +4,118 @@ import api from '../../services/api';
 import { Question } from '../../types';
 import { AppShell } from '../../components/AppShell';
 
+const DIFFICULTIES = ['all', 'easy', 'medium', 'hard'] as const;
+
+const DiffBadge = ({ d }: { d: string }) => (
+  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider ${
+    d === 'easy' ? 'badge-easy' : d === 'medium' ? 'badge-medium' : 'badge-hard'
+  }`}>{d}</span>
+);
+
 export const Practice = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    fetchQuestions();
+    setLoading(true);
+    const params = filter !== 'all' ? `?difficulty=${filter}` : '';
+    api.get(`/questions${params}`)
+      .then((res: any) => setQuestions(res.data.data))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [filter]);
 
-  const fetchQuestions = async () => {
-    try {
-      const params = filter !== 'all' ? `?difficulty=${filter}` : '';
-      const res = await api.get(`/questions${params}`);
-      setQuestions(res.data.data);
-    } catch (error) {
-      console.error('Failed to fetch questions', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const filtered = questions.filter(q =>
+    !search || q.title?.toLowerCase().includes(search.toLowerCase()) ||
+    q.tags?.some(t => t.toLowerCase().includes(search.toLowerCase()))
+  );
 
-  if (loading) {
-    return (
-      <AppShell title="Practice" subtitle="Loading problems…">
-        <div className="flex justify-center py-20">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-slate-700 border-t-emerald-500" />
-        </div>
-      </AppShell>
-    );
-  }
+  const counts = { easy: 0, medium: 0, hard: 0 };
+  questions.forEach(q => { if (q.difficulty in counts) counts[q.difficulty as keyof typeof counts]++; });
 
   return (
     <AppShell
       title="Practice"
-      subtitle="Solve problems outside of timed assessments. Same editor, no grade pressure."
+      subtitle="Solve problems at your own pace. No timer, no pressure."
       wide
     >
-      <div className="mb-6">
-        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">Difficulty</p>
-        <div className="flex flex-wrap gap-2">
-          {['all', 'easy', 'medium', 'hard'].map((level) => (
-            <button
-              key={level}
-              type="button"
-              onClick={() => setFilter(level)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                filter === level
-                  ? 'bg-emerald-600 text-white'
-                  : 'border border-slate-700 bg-slate-900/50 text-slate-300 hover:border-slate-600'
-              }`}
-            >
-              {level.charAt(0).toUpperCase() + level.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {questions.map((q) => (
-          <button
-            key={q.id}
-            type="button"
-            onClick={() => navigate(`/practice/${q.id}`)}
-            className="w-full text-left rounded-xl border border-slate-800 bg-slate-900/50 p-5 hover:border-slate-600 transition-colors group"
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="min-w-0">
-                <h3 className="text-lg font-semibold text-white group-hover:text-emerald-300 transition-colors">
-                  {q.title}
-                </h3>
-                {q.description ? (
-                  <p className="mt-1 text-sm text-slate-400 line-clamp-2">{q.description}</p>
-                ) : null}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <span
-                    className={`rounded-md px-2 py-0.5 text-xs font-semibold ${
-                      q.difficulty === 'easy'
-                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                        : q.difficulty === 'medium'
-                          ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                          : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
-                    }`}
-                  >
-                    {q.difficulty}
-                  </span>
-                  {q.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-md border border-slate-700 bg-slate-800/80 px-2 py-0.5 text-xs text-slate-400"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <span className="shrink-0 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-white group-hover:bg-emerald-600 transition-colors">
-                Open
-              </span>
+      {/* Stats row */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        {(['easy','medium','hard'] as const).map(d => (
+          <div key={d} className="card p-4 text-center">
+            <div className={`font-display font-bold text-2xl ${d === 'easy' ? 'text-accent' : d === 'medium' ? 'text-warn' : 'text-danger'}`}>
+              {counts[d]}
             </div>
-          </button>
+            <div className="mono-label mt-1">{d}</div>
+          </div>
         ))}
       </div>
 
-      {questions.length === 0 && (
-        <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900/30 py-16 text-center">
-          <p className="text-slate-400 text-sm">No problems match this filter.</p>
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="flex gap-1 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
+          {DIFFICULTIES.map(d => (
+            <button key={d} type="button" onClick={() => setFilter(d)}
+              className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                filter === d
+                  ? 'bg-accent text-base shadow-sm'
+                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+              }`}>
+              {d.charAt(0).toUpperCase() + d.slice(1)}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 max-w-xs">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search problems…"
+            className="input pl-9 text-sm py-2"
+          />
+        </div>
+      </div>
+
+      {/* Problem list */}
+      {loading ? (
+        <div className="space-y-3">
+          {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="card border-dashed py-16 text-center">
+          <p className="text-[var(--text-secondary)] text-sm">No problems match this filter.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filtered.map((q, idx) => (
+            <button
+              key={q.id}
+              type="button"
+              onClick={() => navigate(`/practice/${q.id}`)}
+              className="card card-interactive w-full text-left p-4 group flex items-center gap-4 animate-fade-in"
+              style={{ animationDelay: `${idx * 30}ms` }}
+            >
+              <span className="font-mono text-xs text-[var(--text-muted)] w-6 shrink-0 text-right">{idx + 1}</span>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <h3 className="font-semibold text-[var(--text-primary)] group-hover:text-accent transition-colors">
+                    {q.title}
+                  </h3>
+                  <DiffBadge d={q.difficulty} />
+                </div>
+                {q.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {q.tags.map(tag => <span key={tag} className="tag">{tag}</span>)}
+                  </div>
+                )}
+              </div>
+              <svg className="w-4 h-4 text-[var(--text-muted)] group-hover:text-accent group-hover:translate-x-1 transition-all shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          ))}
         </div>
       )}
     </AppShell>

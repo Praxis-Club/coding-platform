@@ -6,90 +6,53 @@ export const Settings = () => {
   const [loading, setLoading] = useState<string | null>(null);
 
   const handleAction = async (action: string, endpoint: string, message: string) => {
-    if (!confirm(`⚠️ WARNING: ${message}\n\nThis action is irreversible. Are you absolutely sure?`)) {
-      return;
-    }
-
+    if (!confirm(`⚠️ ${message}\n\nThis is irreversible. Continue?`)) return;
     setLoading(action);
     try {
       const res = await api.post(`/admin${endpoint}`);
-      alert(res.data.message || 'Operation successful.');
+      alert(res.data.message || 'Done.');
     } catch (err: any) {
-      alert(err.response?.data?.error?.message || 'Operation failed. Please try again.');
-    } finally {
-      setLoading(null);
-    }
+      alert(err.response?.data?.error?.message || 'Operation failed.');
+    } finally { setLoading(null); }
   };
 
+  const actions = [
+    { id: 'reset', label: 'Reset All Attempts', desc: 'Deletes all test attempts and submissions. Students and tests are kept.', endpoint: '/reset-attempts', msg: 'Reset all test attempts and submissions?', color: 'text-warn', btnCls: 'bg-[var(--warn-dim)] text-warn border border-[rgba(245,158,11,0.3)] hover:bg-[rgba(245,158,11,0.2)]' },
+    { id: 'students', label: 'Delete All Students', desc: 'Removes all student accounts and their data. Tests and admin accounts are kept.', endpoint: '/delete-students', msg: 'Delete ALL student accounts?', color: 'text-danger', btnCls: 'btn-danger' },
+    { id: 'tests', label: 'Delete All Tests', desc: 'Removes all assessments, questions, test cases, and attempt data permanently.', endpoint: '/delete-tests', msg: 'Delete ALL assessments and questions?', color: 'text-danger', btnCls: 'btn-danger' },
+  ];
+
   return (
-    <AppShell 
-      title="Settings" 
-      subtitle="Platform management and data controls"
-    >
-      <div className="max-w-4xl">
-        <div className="rounded-2xl border border-rose-500/20 bg-rose-500/5 p-8">
-          <h2 className="text-xl font-bold text-rose-500 flex items-center gap-2 mb-6">
-            <span className="text-2xl">🚨</span> Danger Zone
-          </h2>
-
-          <div className="space-y-6">
-            {/* Reset Attempts */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div className="max-w-xl">
-                <h3 className="text-lg font-bold text-amber-500">Reset All Attempts</h3>
-                <p className="text-sm text-slate-400 mt-1">
-                  Deletes all test attempts and question submissions. Students and tests are kept. All scores and progress will be reset to zero.
-                </p>
+    <AppShell title="Settings" subtitle="Platform management and data controls.">
+      <div className="max-w-3xl space-y-4">
+        <div className="card border-[rgba(255,71,87,0.2)] p-6">
+          <div className="flex items-center gap-2 mb-5">
+            <svg className="w-5 h-5 text-danger" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <h2 className="font-display font-bold text-danger">Danger Zone</h2>
+          </div>
+          <div className="space-y-3">
+            {actions.map(a => (
+              <div key={a.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg bg-[var(--bg-elevated)] border border-[var(--border-subtle)]">
+                <div>
+                  <h3 className={`font-semibold text-sm ${a.color}`}>{a.label}</h3>
+                  <p className="text-xs text-[var(--text-muted)] mt-1">{a.desc}</p>
+                </div>
+                <button
+                  onClick={() => handleAction(a.id, a.endpoint, a.msg)}
+                  disabled={loading !== null}
+                  className={`btn shrink-0 text-xs py-2 px-4 ${a.btnCls} disabled:opacity-40`}
+                >
+                  {loading === a.id ? 'Working…' : a.label}
+                </button>
               </div>
-              <button
-                onClick={() => handleAction('reset', '/reset-attempts', 'Reset all test attempts and submissions?')}
-                disabled={loading !== null}
-                className="shrink-0 rounded-lg bg-amber-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-amber-500 disabled:opacity-50 transition-all shadow-lg shadow-amber-900/20"
-              >
-                {loading === 'reset' ? 'Resetting...' : 'Reset All Attempts'}
-              </button>
-            </div>
-
-            {/* Delete All Student Data */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div className="max-w-xl">
-                <h3 className="text-lg font-bold text-rose-500">Delete All Student Data</h3>
-                <p className="text-sm text-slate-400 mt-1">
-                  Removes all student accounts along with their attempts and submissions. Tests, questions, and admin accounts are kept.
-                </p>
-              </div>
-              <button
-                onClick={() => handleAction('students', '/delete-students', 'Delete ALL student accounts and their data?')}
-                disabled={loading !== null}
-                className="shrink-0 rounded-lg bg-rose-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-rose-500 disabled:opacity-50 transition-all shadow-lg shadow-rose-900/20"
-              >
-                {loading === 'students' ? 'Deleting...' : 'Delete All Students & Data'}
-              </button>
-            </div>
-
-            {/* Delete All Tests */}
-            <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-              <div className="max-w-xl">
-                <h3 className="text-lg font-bold text-rose-600">Delete All Tests</h3>
-                <p className="text-sm text-slate-400 mt-1">
-                  Removes all tests, questions, test cases, and all associated attempt data permanently from the platform.
-                </p>
-              </div>
-              <button
-                onClick={() => handleAction('tests', '/delete-tests', 'Delete ALL assessments and questions?')}
-                disabled={loading !== null}
-                className="shrink-0 rounded-lg bg-rose-700 px-6 py-2.5 text-sm font-bold text-white hover:bg-rose-600 disabled:opacity-50 transition-all shadow-lg shadow-rose-950/20"
-              >
-                {loading === 'tests' ? 'Deleting...' : 'Delete All Tests'}
-              </button>
-            </div>
+            ))}
           </div>
         </div>
 
-        <div className="mt-12 p-6 rounded-xl border border-slate-800 bg-slate-900/20">
-          <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-2">System Status</h4>
-          <p className="text-xs text-slate-500">
-            All data management operations are logged for security. These actions perform direct database resets and will not affect the server's availability or uptime.
+        <div className="card p-5">
+          <p className="mono-label mb-2">System Status</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            All data management operations are logged for security. These actions perform direct database resets and will not affect server availability.
           </p>
         </div>
       </div>
