@@ -12,6 +12,7 @@ import questionsRoutes from './modules/questions/questions.routes';
 import assessmentsRoutes from './modules/assessments/assessments.routes';
 import submissionsRoutes from './modules/submissions/submissions.routes';
 import adminRoutes from './modules/admin/admin.routes';
+import leaderboardRoutes from './modules/leaderboard/leaderboard.routes';
 
 const app = express();
 
@@ -51,8 +52,30 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(generalLimiter);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  let dbStatus = 'ok';
+  let redisStatus = 'unavailable';
+
+  try {
+    await (await import('./config/database')).default.$queryRaw`SELECT 1`;
+    dbStatus = 'ok';
+  } catch {
+    dbStatus = 'error';
+  }
+
+  try {
+    const r = (await import('./config/redis')).default;
+    if (r) { await r.ping(); redisStatus = 'ok'; }
+  } catch {
+    redisStatus = 'error';
+  }
+
+  const healthy = dbStatus === 'ok';
+  res.status(healthy ? 200 : 503).json({
+    status: healthy ? 'ok' : 'degraded',
+    timestamp: new Date().toISOString(),
+    services: { database: dbStatus, redis: redisStatus },
+  });
 });
 
 // API routes
@@ -61,6 +84,7 @@ app.use('/api/v1/questions', questionsRoutes);
 app.use('/api/v1/assessments', assessmentsRoutes);
 app.use('/api/v1/submissions', submissionsRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/leaderboard', leaderboardRoutes);
 
 // 404 handler
 app.use(notFound);
