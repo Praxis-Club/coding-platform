@@ -1,5 +1,5 @@
 [phases.setup]
-nixpkgs = ["gcc", "g++", "openjdk", "python3"]
+nixpkgs = ["nodejs", "gcc", "g++", "openjdk", "python3"]
 
 [phases.build]
 cmds = ["npm install", "npm run build"]
