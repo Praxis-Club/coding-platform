@@ -36,7 +36,7 @@ export const Navbar = () => {
               <span className="font-mono font-bold text-accent text-xs">&gt;_</span>
             </div>
             <div className="hidden sm:block">
-              <span className="block font-display font-bold text-[var(--text-primary)] text-sm tracking-tight leading-none">Code7</span>
+              <span className="block font-display font-bold text-[var(--text-primary)] text-sm tracking-tight leading-none">PRAXIS</span>
               <span className="block font-mono text-[10px] text-[var(--text-muted)] mt-0.5">platform</span>
             </div>
           </button>

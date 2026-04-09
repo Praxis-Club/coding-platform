@@ -1,6 +1,8 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Navbar } from './components/Navbar';
+import { PraxisLoader } from './components/PraxisLoader';
+import { useState } from 'react';
 import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
@@ -68,12 +70,17 @@ function AppRoutes() {
 }
 
 function App() {
+  const [loaded, setLoaded] = useState(false);
+
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <AppRoutes />
-      </AuthProvider>
-    </BrowserRouter>
+    <>
+      {!loaded && <PraxisLoader onDone={() => setLoaded(true)} />}
+      <BrowserRouter>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </BrowserRouter>
+    </>
   );
 }
 

@@ -12,7 +12,7 @@ export const CodeEditor = ({ value, onChange, language }: CodeEditorProps) => {
 
   useEffect(() => {
     if (!monaco) return;
-    monaco.editor.defineTheme('code7-dark', {
+    monaco.editor.defineTheme('praxis-dark', {
       base: 'vs-dark',
       inherit: true,
       rules: [
@@ -45,7 +45,7 @@ export const CodeEditor = ({ value, onChange, language }: CodeEditorProps) => {
         'scrollbarSlider.activeBackground': '#00ff8830',
       },
     });
-    monaco.editor.setTheme('code7-dark');
+    monaco.editor.setTheme('praxis-dark');
   }, [monaco]);
 
   return (
@@ -54,7 +54,7 @@ export const CodeEditor = ({ value, onChange, language }: CodeEditorProps) => {
       language={language}
       value={value}
       onChange={val => onChange(val || '')}
-      theme="code7-dark"
+      theme="praxis-dark"
       options={{
         minimap: { enabled: false },
         fontSize: 14,

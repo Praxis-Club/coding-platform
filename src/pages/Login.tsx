@@ -37,7 +37,7 @@ export const Login = () => {
             <span className="font-mono font-bold text-accent text-sm">&gt;_</span>
           </div>
           <h1 className="font-display font-bold text-2xl text-[var(--text-primary)]">Welcome back</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-1">Sign in to <span className="text-accent font-semibold">Code7</span></p>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">Sign in to <span className="text-accent font-semibold">PRAXIS</span></p>
         </div>
 
         <div className="card p-6">
