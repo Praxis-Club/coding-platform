@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { CodeEditor } from '../../components/CodeEditor';
+import { SecureTestOverlay } from '../../components/SecureTestOverlay';
+import { useSecureTest } from '../../hooks/useSecureTest';
 import api from '../../services/api';
 
 type EvalStage = 'submitting' | 'evaluating' | 'done' | 'error';
@@ -43,8 +45,19 @@ export const PracticeProblem = () => {
   const queryParams = new URLSearchParams(window.location.search);
   const userAssessmentId = queryParams.get('userAssessmentId');
   const [userAssessment, setUserAssessment] = useState<any>(null);
-  const [switchCount, setSwitchCount] = useState(0);
   const [isInitializing] = useState(false);
+
+  // ── Secure Test Mode ───────────────────────────────────────────────────────
+  const { warning, isLocked, tabSwitchCount, dismissWarning, requestFullscreen, initSecureMode } = useSecureTest({
+    enabled: !!userAssessmentId,
+    maxTabSwitches: 3,
+    onTabSwitch: async (count) => {
+      try { await api.patch(`/assessments/${userAssessmentId}/tab-switch`); } catch {}
+      setSwitchCount(count);
+    },
+    onViolationLimit: () => { submitSolution(); },
+  });
+  const [switchCount, setSwitchCount] = useState(0);
 
   useEffect(() => {
     let ignore = false;
@@ -60,21 +73,6 @@ export const PracticeProblem = () => {
     if (runCooldown > 0) timer = setInterval(() => setRunCooldown(p => p > 0 ? p - 1 : 0), 1000);
     return () => clearInterval(timer);
   }, [runCooldown]);
-
-  useEffect(() => {
-    if (!userAssessmentId) return;
-    const handleVisibilityChange = async () => {
-      if (document.visibilityState === 'hidden') {
-        const newCount = switchCount + 1;
-        setSwitchCount(newCount);
-        try { await api.patch(`/assessments/${userAssessmentId}/tab-switch`); } catch {}
-        if (newCount === 1) alert('⚠️ Tab switching is NOT allowed. One more will auto-submit.');
-        else if (newCount >= 2) { alert('🚫 Auto-submitting due to tab switches.'); submitSolution(); }
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [userAssessmentId, switchCount]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -133,6 +131,8 @@ export const PracticeProblem = () => {
       const startTime = new Date(ua.startedAt).getTime();
       const remaining = Math.max(0, Math.floor((ua.assessment.duration * 60000 - (Date.now() - startTime)) / 1000));
       setTimeLeft(remaining);
+      // Enter secure fullscreen mode
+      await initSecureMode();
     } catch (err) { if (!ignore) console.error(err); }
     finally { if (!ignore) setLoading(false); }
   };
@@ -279,7 +279,16 @@ export const PracticeProblem = () => {
   const allPassed = evalOverlay?.passedTests === evalOverlay?.totalTests && (evalOverlay?.totalTests ?? 0) > 0;
 
   return (
-    <div className="h-screen flex flex-col bg-base overflow-hidden" style={{ fontFamily: 'var(--font-body)' }}>
+    <>
+    <div
+      className="h-screen flex flex-col bg-base overflow-hidden"
+      style={{
+        fontFamily: 'var(--font-body)',
+        filter: (warning || isLocked) ? 'blur(3px)' : 'none',
+        pointerEvents: (warning || isLocked) ? 'none' : 'auto',
+        transition: 'filter 0.2s ease',
+      }}
+    >
 
       {/* ── Eval Overlay ── */}
       {evalOverlay && (
@@ -660,5 +669,15 @@ export const PracticeProblem = () => {
         </div>
       </div>
     </div>
+    {/* ── Secure Test Overlay (outside blurred container) ── */}
+    <SecureTestOverlay
+      warning={warning}
+      isLocked={isLocked}
+      tabSwitchCount={tabSwitchCount}
+      maxTabSwitches={3}
+      onReenterFullscreen={requestFullscreen}
+      onDismiss={dismissWarning}
+    />
+    </>
   );
 };

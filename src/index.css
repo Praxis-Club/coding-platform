@@ -291,3 +291,20 @@ body {
 /* ── Typing cursor blink ───────────────────────────────────────────────────── */
 @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
 .cursor-blink { animation: blink 1s step-end infinite; }
+
+/* ── Secure Test Mode ──────────────────────────────────────────────────────── */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-4px); }
+  80%       { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.4s ease-in-out; }
+
+/* Fullscreen zoom-in lock effect */
+@keyframes secure-lock-in {
+  0%   { transform: scale(1.04); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-lock-in { animation: secure-lock-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
