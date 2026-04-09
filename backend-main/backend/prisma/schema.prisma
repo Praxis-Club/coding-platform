@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String           @id @default(uuid())
+  email               String           @unique
+  passwordHash        String           @map("password_hash")
+  fullName            String           @map("full_name")
+  role                UserRole
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+  lastLogin           DateTime?        @map("last_login")
+  isActive            Boolean          @default(true) @map("is_active")
+  createdAssessments  Assessment[]
+  createdQuestions    Question[]
+  practiceSubmissions Submission[]     @relation("PracticeSubmissions")
+  userAssessments     UserAssessment[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model Question {
+  id                    String               @id @default(uuid())
+  title                 String
+  description           String
+  difficulty            Difficulty
+  timeLimit             Int                  @map("time_limit")
+  memoryLimit           Int                  @map("memory_limit")
+  constraints           String?
+  inputFormat           String?              @map("input_format")
+  outputFormat          String?              @map("output_format")
+  sampleInput           String?              @map("sample_input")
+  sampleOutput          String?              @map("sample_output")
+  explanation           String?
+  tags                  String[]
+  starterCodePython     String?              @map("starter_code_python")
+  starterCodeJavascript String?              @map("starter_code_javascript")
+  starterCodeJava       String?              @map("starter_code_java")
+  starterCodeCpp        String?              @map("starter_code_cpp")
+  starterCodeC          String?              @map("starter_code_c")
+  createdById           String               @map("created_by")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  isActive              Boolean              @default(true) @map("is_active")
+  assessmentQuestions   AssessmentQuestion[]
+  createdBy             User                 @relation(fields: [createdById], references: [id])
+  submissions           Submission[]
+  testCases             TestCase[]
+
+  @@index([difficulty])
+  @@index([createdById])
+  @@index([isActive])
+  @@map("questions")
+}
+
+model TestCase {
+  id                String             @id @default(uuid())
+  questionId        String             @map("question_id")
+  input             String
+  expectedOutput    String             @map("expected_output")
+  isHidden          Boolean            @default(false) @map("is_hidden")
+  points            Int                @default(10)
+  orderIndex        Int                @map("order_index")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  submissionResults SubmissionResult[]
+  question          Question           @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("test_cases")
+}
+
+model Assessment {
+  id                  String               @id @default(uuid())
+  title               String
+  description         String?
+  duration            Int
+  passingScore        Int                  @default(0) @map("passing_score")
+  totalScore          Int?                 @map("total_score")
+  startTime           DateTime?            @map("start_time")
+  endTime             DateTime?            @map("end_time")
+  instructions        String?
+  allowedLanguages    String[]             @map("allowed_languages")
+  createdById         String               @map("created_by")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  isActive            Boolean              @default(true) @map("is_active")
+  assessmentQuestions AssessmentQuestion[]
+  createdBy           User                 @relation(fields: [createdById], references: [id])
+  userAssessments     UserAssessment[]
+
+  @@index([createdById])
+  @@index([startTime, endTime])
+  @@map("assessments")
+}
+
+model AssessmentQuestion {
+  id           String     @id @default(uuid())
+  assessmentId String     @map("assessment_id")
+  questionId   String     @map("question_id")
+  points       Int        @default(100)
+  orderIndex   Int        @map("order_index")
+  createdAt    DateTime   @default(now()) @map("created_at")
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+  @@map("assessment_questions")
+}
+
+model UserAssessment {
+  id           String           @id @default(uuid())
+  userId       String           @map("user_id")
+  assessmentId String           @map("assessment_id")
+  status       AssessmentStatus @default(not_started)
+  startedAt    DateTime?        @map("started_at")
+  completedAt  DateTime?        @map("completed_at")
+  score        Int              @default(0)
+  maxScore     Int?             @map("max_score")
+  timeTaken    Int?             @map("time_taken")
+  tabSwitches  Int              @default(0) @map("tab_switches")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  submissions  Submission[]
+  assessment   Assessment       @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  progress     UserAssessmentProgress[]
+ 
+  @@unique([userId, assessmentId])
+  @@index([userId])
+  @@index([assessmentId])
+  @@index([status])
+  @@map("user_assessments")
+}
+
+model UserAssessmentProgress {
+  id               String         @id @default(uuid())
+  userAssessmentId String         @map("user_assessment_id")
+  questionId       String         @map("question_id")
+  code             String
+  language         String
+  updatedAt        DateTime       @updatedAt @map("updated_at")
+  userAssessment   UserAssessment @relation(fields: [userAssessmentId], references: [id], onDelete: Cascade)
+  
+  @@unique([userAssessmentId, questionId])
+  @@map("user_assessment_progress")
+}
+
+model Submission {
+  id                String             @id @default(uuid())
+  userAssessmentId  String?            @map("user_assessment_id")
+  practiceUserId    String?            @map("practice_user_id")
+  questionId        String             @map("question_id")
+  language          String
+  code              String
+  status            SubmissionStatus   @default(pending)
+  executionTime     Int?               @map("execution_time")
+  memoryUsed        Int?               @map("memory_used")
+  score             Int                @default(0)
+  maxScore          Int?               @map("max_score")
+  passedTests       Int                @default(0) @map("passed_tests")
+  totalTests        Int?               @map("total_tests")
+  errorMessage      String?            @map("error_message")
+  submittedAt       DateTime           @default(now()) @map("submitted_at")
+  evaluatedAt       DateTime?          @map("evaluated_at")
+  submissionResults SubmissionResult[]
+  practiceUser      User?              @relation("PracticeSubmissions", fields: [practiceUserId], references: [id], onDelete: Cascade)
+  question          Question           @relation(fields: [questionId], references: [id])
+  userAssessment    UserAssessment?    @relation(fields: [userAssessmentId], references: [id], onDelete: Cascade)
+
+  @@index([userAssessmentId])
+  @@index([practiceUserId])
+  @@index([questionId])
+  @@index([status])
+  @@map("submissions")
+}
+
+model SubmissionResult {
+  id            String         @id @default(uuid())
+  submissionId  String         @map("submission_id")
+  testCaseId    String         @map("test_case_id")
+  status        TestCaseStatus
+  actualOutput  String?        @map("actual_output")
+  executionTime Int?           @map("execution_time")
+  memoryUsed    Int?           @map("memory_used")
+  errorMessage  String?        @map("error_message")
+  pointsEarned  Int            @default(0) @map("points_earned")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  submission    Submission     @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  testCase      TestCase       @relation(fields: [testCaseId], references: [id])
+
+  @@index([submissionId])
+  @@map("submission_results")
+}
+
+enum UserRole {
+  admin
+  candidate
+}
+
+enum Difficulty {
+  easy
+  medium
+  hard
+}
+
+enum AssessmentStatus {
+  not_started
+  in_progress
+  completed
+  expired
+}
+
+enum SubmissionStatus {
+  pending
+  running
+  completed
+  error
+}
+
+enum TestCaseStatus {
+  passed
+  failed
+  error
+  timeout
+}
