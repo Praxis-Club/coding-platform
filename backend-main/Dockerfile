@@ -14,7 +14,11 @@ RUN npm install
 
 COPY backend/ .
 
-RUN npm run build
+ARG DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy
+ENV DATABASE_URL=$DATABASE_URL
+
+RUN npx prisma generate
+RUN npx tsc
 
 EXPOSE 3000
 
