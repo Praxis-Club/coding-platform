@@ -10,7 +10,7 @@ const envSchema = z.object({
   REDIS_URL: z.string().optional().default('redis://localhost:6379'),
   JWT_SECRET: z.string(),
   JWT_EXPIRES_IN: z.string().default('7d'),
-  DOCKER_ENABLED: z.string().default('true'),
+  DOCKER_ENABLED: z.string().default('false'),
   CODE_TIMEOUT: z.string().default('10000'),
   MAX_MEMORY: z.string().default('256'),
   RATE_LIMIT_WINDOW: z.string().default('60000'),

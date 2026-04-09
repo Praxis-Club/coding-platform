@@ -1,11 +1,8 @@
 import prisma from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
-import { ExecutorService } from '../executor/executor.service';
 import { Language } from '../executor/languages.config';
 import { fastExecutor, cacheTestCases, getCachedTestCases } from '../executor/fast.executor';
 import { EventEmitter } from 'events';
-
-const executor = new ExecutorService();
 
 export class SubmissionsService extends EventEmitter {
   private normalizeOutputText(value: string): string {
@@ -63,22 +60,26 @@ export class SubmissionsService extends EventEmitter {
   }
 
   private async executeWithInputCompatibility(language: Language, code: string, input: string) {
-    const firstTry = await executor.executeWithDocker(language, code, input);
-    if (!this.shouldRetryWithNormalizedInput(language, input, firstTry.error)) {
-      return firstTry;
+    const firstTry = await fastExecutor.runOnce(language, code, input);
+    const result = {
+      output: firstTry.output,
+      error: firstTry.timedOut ? 'Time limit exceeded' : firstTry.error,
+      executionTime: firstTry.executionTime,
+      success: firstTry.exitCode === 0 && !firstTry.timedOut,
+    };
+
+    // Retry with normalized bracket input for Python if ValueError
+    if (this.shouldRetryWithNormalizedInput(language, input, result.error)) {
+      const normalizedInput = this.normalizeBracketArrayInput(input);
+      if (normalizedInput !== input) {
+        const retry = await fastExecutor.runOnce(language, code, normalizedInput);
+        if (retry.exitCode === 0 && !retry.timedOut) {
+          return { output: retry.output, error: null, executionTime: retry.executionTime, success: true };
+        }
+      }
     }
 
-    const normalizedInput = this.normalizeBracketArrayInput(input);
-    if (normalizedInput === input) {
-      return firstTry;
-    }
-
-    const secondTry = await executor.executeWithDocker(language as any, code, normalizedInput);
-    if (secondTry.success) {
-      return secondTry;
-    }
-
-    return firstTry;
+    return result;
   }
 
   async submit(data: {
@@ -133,65 +134,56 @@ export class SubmissionsService extends EventEmitter {
         data: { status: 'running' },
       });
 
-      // Parallelize evaluation of test cases
-      const evaluationResults = await Promise.all(testCases.map(async (testCase) => {
-        const result = await this.executeWithInputCompatibility(language, code, testCase.input);
-        const passed = result.success && this.compareOutputs(result.output, testCase.expectedOutput);
-        const resData = {
-          testCaseId: testCase.id,
-          status: result.error ? 'error' : passed ? 'passed' : 'failed',
-          actualOutput: result.output,
-          executionTime: result.executionTime,
-          errorMessage: result.error,
-          pointsEarned: passed ? testCase.points : 0,
-          passed
-        };
-        
-        // Emit for real-time streaming
-        this.emit(`submission:${submissionId}`, resData);
-        
-        return resData;
-      }));
+      // Use FastExecutor: compile-once + parallel execution
+      const fastResult = await fastExecutor.runAllTestCases(
+        language,
+        code,
+        testCases.map(tc => ({ id: tc.id, input: tc.input, expectedOutput: tc.expectedOutput, points: tc.points }))
+      );
 
-      // Persist results and update totals
+      // Emit real-time results and persist
       let totalScore = 0;
       let passedTests = 0;
 
-      for (const resData of evaluationResults) {
-        if (resData.passed) passedTests++;
-        totalScore += resData.pointsEarned;
+      for (const r of fastResult.results) {
+        if (r.passed) passedTests++;
+        totalScore += r.pointsEarned;
+
+        const emitData = {
+          testCaseId: r.testCaseId,
+          status: r.status,
+          actualOutput: r.actualOutput,
+          executionTime: r.executionTime,
+          errorMessage: r.errorMessage,
+          pointsEarned: r.pointsEarned,
+          pointsAvailable: r.pointsAvailable,
+          passed: r.passed,
+        };
+        this.emit(`submission:${submissionId}`, emitData);
 
         await prisma.submissionResult.create({
           data: {
             submissionId,
-            testCaseId: resData.testCaseId,
-            status: resData.status as any,
-            actualOutput: resData.actualOutput,
-            executionTime: resData.executionTime,
-            errorMessage: resData.errorMessage,
-            pointsEarned: resData.pointsEarned,
+            testCaseId: r.testCaseId,
+            status: r.status as any,
+            actualOutput: r.actualOutput,
+            executionTime: r.executionTime,
+            errorMessage: r.errorMessage,
+            pointsEarned: r.pointsEarned,
           },
         });
       }
 
       await prisma.submission.update({
         where: { id: submissionId },
-        data: {
-          status: 'completed',
-          score: totalScore,
-          passedTests,
-          evaluatedAt: new Date(),
-        },
+        data: { status: 'completed', score: totalScore, passedTests, evaluatedAt: new Date() },
       });
 
       await this.updateUserAssessmentScore(submissionId);
     } catch (error) {
       await prisma.submission.update({
         where: { id: submissionId },
-        data: {
-          status: 'error',
-          errorMessage: 'Evaluation failed',
-        },
+        data: { status: 'error', errorMessage: 'Evaluation failed' },
       });
     }
   }
