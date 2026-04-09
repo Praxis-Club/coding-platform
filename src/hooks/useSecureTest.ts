@@ -6,10 +6,10 @@ export type SecureWarning =
   | { type: 'locked'; reason: string };
 
 interface UseSecureTestOptions {
-  enabled: boolean;          // only active during assessment (userAssessmentId present)
+  enabled: boolean;
   maxTabSwitches?: number;
-  onViolationLimit: () => void;  // called when tab switches exceed max
-  onTabSwitch?: (count: number) => void; // called on each switch (for backend sync)
+  onViolationLimit: () => void;
+  onTabSwitch?: (count: number) => void;
 }
 
 interface UseSecureTestReturn {
@@ -19,7 +19,6 @@ interface UseSecureTestReturn {
   isLocked: boolean;
   dismissWarning: () => void;
   requestFullscreen: () => void;
-  initSecureMode: () => Promise<void>;
 }
 
 export function useSecureTest({
@@ -33,111 +32,105 @@ export function useSecureTest({
   const [warning, setWarning] = useState<SecureWarning | null>(null);
   const [isLocked, setIsLocked] = useState(false);
 
-  // Use ref so event handlers always see latest count
+  // Stable refs — event handlers read these, never stale
   const switchCountRef = useRef(0);
   const isLockedRef = useRef(false);
+  const hasEnteredFullscreenRef = useRef(false); // don't warn before first entry
+  const onViolationLimitRef = useRef(onViolationLimit);
+  const onTabSwitchRef = useRef(onTabSwitch);
+
+  useEffect(() => { onViolationLimitRef.current = onViolationLimit; }, [onViolationLimit]);
+  useEffect(() => { onTabSwitchRef.current = onTabSwitch; }, [onTabSwitch]);
 
   const requestFullscreen = useCallback(() => {
-    const el = document.documentElement;
-    if (el.requestFullscreen) el.requestFullscreen();
+    document.documentElement.requestFullscreen().catch(() => {});
   }, []);
 
-  const initSecureMode = useCallback(async () => {
-    if (!enabled) return;
-    try {
-      await document.documentElement.requestFullscreen();
-    } catch {
-      // Browser may block — show warning
-      setWarning({ type: 'fullscreen-exit' });
-    }
-  }, [enabled]);
-
-  const dismissWarning = useCallback(() => {
-    setWarning(null);
-  }, []);
+  const dismissWarning = useCallback(() => setWarning(null), []);
 
   // ── Fullscreen change ──────────────────────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
 
-    const handleFsChange = () => {
+    const handle = () => {
       const inFs = !!document.fullscreenElement;
       setIsFullscreen(inFs);
-      if (!inFs && !isLockedRef.current) {
+
+      if (inFs) {
+        hasEnteredFullscreenRef.current = true;
+      } else if (hasEnteredFullscreenRef.current && !isLockedRef.current) {
+        // Only warn if we were previously in fullscreen (not on initial load)
         setWarning({ type: 'fullscreen-exit' });
       }
     };
 
-    document.addEventListener('fullscreenchange', handleFsChange);
-    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+    document.addEventListener('fullscreenchange', handle);
+    return () => document.removeEventListener('fullscreenchange', handle);
   }, [enabled]);
 
   // ── ESC key interception ───────────────────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Prevent ESC from exiting fullscreen — show modal instead
+    const handle = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (document.fullscreenElement) {
-          e.preventDefault();
-          e.stopImmediatePropagation();
+        // Can't truly block ESC from exiting fullscreen in all browsers,
+        // but we catch it and show the modal immediately
+        if (hasEnteredFullscreenRef.current && !isLockedRef.current) {
+          setWarning({ type: 'fullscreen-exit' });
         }
-        setWarning({ type: 'fullscreen-exit' });
       }
-      // Block common cheat shortcuts outside editor
+      // Block copy/paste/select-all outside Monaco
       const target = e.target as HTMLElement;
-      const inEditor = target.closest('.monaco-editor');
-      if (!inEditor) {
+      if (!target.closest('.monaco-editor')) {
         if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'a', 'u'].includes(e.key.toLowerCase())) {
           e.preventDefault();
         }
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
+    document.addEventListener('keydown', handle, true);
+    return () => document.removeEventListener('keydown', handle, true);
   }, [enabled]);
 
   // ── Tab / visibility switch ────────────────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
 
-    const handleVisibility = () => {
+    const handle = () => {
       if (document.visibilityState !== 'hidden') return;
       if (isLockedRef.current) return;
 
       const newCount = switchCountRef.current + 1;
       switchCountRef.current = newCount;
       setTabSwitchCount(newCount);
-      onTabSwitch?.(newCount);
+      onTabSwitchRef.current?.(newCount);
 
       if (newCount >= maxTabSwitches) {
         isLockedRef.current = true;
         setIsLocked(true);
         setWarning({ type: 'locked', reason: `Tab switched ${newCount} times. Test auto-submitted.` });
-        onViolationLimit();
+        onViolationLimitRef.current();
       } else {
         setWarning({ type: 'tab-switch', count: newCount, max: maxTabSwitches });
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [enabled, maxTabSwitches, onViolationLimit, onTabSwitch]);
+    document.addEventListener('visibilitychange', handle);
+    return () => document.removeEventListener('visibilitychange', handle);
+  }, [enabled, maxTabSwitches]); // stable — callbacks via refs
 
-  // ── Disable right-click ────────────────────────────────────────────────────
+  // ── Disable right-click outside editor ────────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
     const block = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.monaco-editor')) e.preventDefault();
+      if (!(e.target as HTMLElement).closest('.monaco-editor')) e.preventDefault();
     };
     document.addEventListener('contextmenu', block);
     return () => document.removeEventListener('contextmenu', block);
   }, [enabled]);
 
-  // ── Disable text selection outside editor ──────────────────────────────────
+  // ── Disable text selection outside editor ─────────────────────────────────
   useEffect(() => {
     if (!enabled) return;
     const style = document.createElement('style');
@@ -149,18 +142,10 @@ export function useSecureTest({
     document.head.appendChild(style);
     document.body.classList.add('secure-test');
     return () => {
-      document.head.removeChild(style);
+      style.remove();
       document.body.classList.remove('secure-test');
     };
   }, [enabled]);
 
-  return {
-    isFullscreen,
-    tabSwitchCount,
-    warning,
-    isLocked,
-    dismissWarning,
-    requestFullscreen,
-    initSecureMode,
-  };
+  return { isFullscreen, tabSwitchCount, warning, isLocked, dismissWarning, requestFullscreen };
 }

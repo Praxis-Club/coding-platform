@@ -46,16 +46,18 @@ export const PracticeProblem = () => {
   const userAssessmentId = queryParams.get('userAssessmentId');
   const [userAssessment, setUserAssessment] = useState<any>(null);
   const [isInitializing] = useState(false);
+  const [secureReady, setSecureReady] = useState(false); // gate: show "Enter Fullscreen" screen first
 
   // ── Secure Test Mode ───────────────────────────────────────────────────────
-  const { warning, isLocked, tabSwitchCount, dismissWarning, requestFullscreen, initSecureMode } = useSecureTest({
-    enabled: !!userAssessmentId,
+  const submitSolutionRef = useRef<() => void>(() => {});
+  const { warning, isLocked, tabSwitchCount, dismissWarning, requestFullscreen } = useSecureTest({
+    enabled: !!userAssessmentId && secureReady,
     maxTabSwitches: 3,
     onTabSwitch: async (count) => {
       try { await api.patch(`/assessments/${userAssessmentId}/tab-switch`); } catch {}
       setSwitchCount(count);
     },
-    onViolationLimit: () => { submitSolution(); },
+    onViolationLimit: () => { submitSolutionRef.current(); },
   });
   const [switchCount, setSwitchCount] = useState(0);
 
@@ -131,8 +133,6 @@ export const PracticeProblem = () => {
       const startTime = new Date(ua.startedAt).getTime();
       const remaining = Math.max(0, Math.floor((ua.assessment.duration * 60000 - (Date.now() - startTime)) / 1000));
       setTimeLeft(remaining);
-      // Enter secure fullscreen mode
-      await initSecureMode();
     } catch (err) { if (!ignore) console.error(err); }
     finally { if (!ignore) setLoading(false); }
   };
@@ -262,6 +262,9 @@ export const PracticeProblem = () => {
 
   const closeEvalOverlay = () => { setEvalOverlay(null); setActiveTab('results'); };
 
+  // Keep submitSolutionRef in sync so the secure hook can call it stably
+  submitSolutionRef.current = submitSolution;
+
   const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
   const isTimeLow = timeLeft <= 300;
 
@@ -271,6 +274,46 @@ export const PracticeProblem = () => {
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-[var(--border-default)] border-t-accent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-sm text-[var(--text-secondary)] font-mono">Loading problem…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Fullscreen gate — shown once before test starts ────────────────────────
+  if (userAssessmentId && !secureReady) {
+    return (
+      <div className="fixed inset-0 bg-base flex items-center justify-center bg-grid">
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-96 h-96 bg-accent/5 blur-[120px] rounded-full pointer-events-none" />
+        <div className="card w-full max-w-sm mx-4 p-8 text-center animate-fade-in z-10 border border-[rgba(0,255,136,0.2)]">
+          <div className="w-14 h-14 rounded-2xl bg-[var(--accent-dim)] border border-[rgba(0,255,136,0.3)] flex items-center justify-center mx-auto mb-5">
+            <svg className="w-7 h-7 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+              <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+            </svg>
+          </div>
+          <h2 className="font-display font-bold text-xl text-[var(--text-primary)] mb-2">Secure Test Mode</h2>
+          <p className="text-sm text-[var(--text-secondary)] leading-relaxed mb-6">
+            This test runs in fullscreen. Tab switching is monitored — <span className="text-warn font-semibold">3 violations</span> will auto-submit your test.
+          </p>
+          <ul className="text-xs text-[var(--text-muted)] font-mono space-y-1.5 mb-7 text-left bg-[var(--bg-elevated)] rounded-xl p-4 border border-[var(--border-subtle)]">
+            <li className="flex items-center gap-2"><span className="text-accent">✓</span> Fullscreen enforced</li>
+            <li className="flex items-center gap-2"><span className="text-accent">✓</span> Tab switches tracked (max 3)</li>
+            <li className="flex items-center gap-2"><span className="text-accent">✓</span> Right-click disabled</li>
+            <li className="flex items-center gap-2"><span className="text-accent">✓</span> Copy/paste blocked outside editor</li>
+          </ul>
+          <button
+            className="btn btn-primary w-full justify-center py-3 text-sm"
+            onClick={() => {
+              document.documentElement.requestFullscreen().catch(() => {});
+              setSecureReady(true);
+            }}
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+            </svg>
+            Enter Fullscreen & Start
+          </button>
+          <p className="mt-3 text-xs text-[var(--text-muted)]">Assessment: <span className="text-[var(--text-secondary)]">{userAssessment?.assessment?.title}</span></p>
         </div>
       </div>
     );
