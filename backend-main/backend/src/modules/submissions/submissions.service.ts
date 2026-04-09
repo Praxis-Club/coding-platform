@@ -2,6 +2,7 @@ import prisma from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { ExecutorService } from '../executor/executor.service';
 import { Language } from '../executor/languages.config';
+import { fastExecutor, cacheTestCases, getCachedTestCases } from '../executor/fast.executor';
 import { EventEmitter } from 'events';
 
 const executor = new ExecutorService();
@@ -404,63 +405,48 @@ export class SubmissionsService extends EventEmitter {
 
   async runCode(language: string, code: string, input: string) {
     // ── TEMPORARY EXECUTION — NO DB WRITE ─────────────────────────────────
-    // This is called by POST /run. Code is executed in sandbox and result
-    // is returned directly. Nothing is persisted to the database.
-    const result = await this.executeWithInputCompatibility(language as Language, code, input);
-    return result;
+    // Fast path: spawn-based execution with stdin piping, no file I/O for input.
+    const result = await fastExecutor.runOnce(language as Language, code, input);
+    return {
+      output: result.output,
+      error: result.timedOut ? 'Time limit exceeded' : result.error,
+      executionTime: result.executionTime,
+      success: result.exitCode === 0 && !result.timedOut,
+    };
   }
 
   async runAllTestCases(data: { questionId: string; language: string; code: string }) {
     // ── TEMPORARY EXECUTION — NO DB WRITE ─────────────────────────────────
-    // Called by POST /run-all. Runs against all test cases for preview only.
-    // Results are returned in-memory. Nothing is stored.
-    const question = await prisma.question.findUnique({
-      where: { id: data.questionId },
-      include: { testCases: true },
-    });
+    // Fast path: compile-once + parallel test case execution.
+    // Test cases are cached in memory to avoid repeated DB fetches.
 
-    if (!question) {
-      throw new AppError(404, 'QUESTION_NOT_FOUND', 'Question not found');
+    // Try memory cache first
+    let testCases = getCachedTestCases(data.questionId);
+
+    if (!testCases) {
+      const question = await prisma.question.findUnique({
+        where: { id: data.questionId },
+        include: { testCases: { orderBy: { orderIndex: 'asc' } } },
+      });
+      if (!question) throw new AppError(404, 'QUESTION_NOT_FOUND', 'Question not found');
+      testCases = question.testCases;
+      cacheTestCases(data.questionId, testCases); // populate cache
     }
 
-    const testCases = question.testCases;
-    // Run all test cases in parallel
-    const evaluationResults = await Promise.all(testCases.map(async (testCase) => {
-      const execResult = await this.executeWithInputCompatibility(data.language as Language, data.code, testCase.input);
-      const passed = execResult.success && this.compareOutputs(execResult.output, testCase.expectedOutput);
-      const resData = {
-        testCaseId: testCase.id,
-        input: testCase.input,
-        expectedOutput: testCase.expectedOutput,
-        actualOutput: execResult.output,
-        status: execResult.error ? 'error' : passed ? 'passed' : 'failed',
-        pointsEarned: passed ? testCase.points : 0,
-        pointsAvailable: testCase.points,
-        errorMessage: execResult.error,
-        passed
-      };
-
-      // Emit for live run results
-      this.emit(`run:${data.questionId}`, resData);
-
-      return resData;
-    }));
-
-    let totalScore = 0;
-    let passedTests = 0;
-    evaluationResults.forEach(res => {
-      if (res.passed) passedTests += 1;
-      totalScore += res.pointsEarned;
-    });
+    const result = await fastExecutor.runAllTestCases(
+      data.language as Language,
+      data.code,
+      testCases.map(tc => ({ id: tc.id, input: tc.input, expectedOutput: tc.expectedOutput, points: tc.points }))
+    );
 
     return {
-      questionId: question.id,
+      questionId: data.questionId,
       status: 'completed',
-      passedTests,
-      totalTests: testCases.length,
-      score: totalScore,
-      maxScore: testCases.reduce((sum, tc) => sum + tc.points, 0),
-      submissionResults: evaluationResults,
+      passedTests: result.passedTests,
+      totalTests: result.totalTests,
+      score: result.score,
+      maxScore: result.maxScore,
+      submissionResults: result.results,
     };
   }
 

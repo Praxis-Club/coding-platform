@@ -1,6 +1,7 @@
 import prisma from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { cache } from '../../utils/cache';
+import { invalidateTestCaseCache } from '../executor/fast.executor';
 
 export class QuestionsService {
   async create(data: any, userId: string) {
@@ -126,9 +127,10 @@ export class QuestionsService {
       });
     });
 
-    // Invalidate Cache
+    // Invalidate Redis cache + in-memory test case cache
     await cache.del(`question:${id}:public`);
     await cache.del(`question:${id}:admin`);
+    invalidateTestCaseCache(id);
 
     return updated;
   }
@@ -138,8 +140,8 @@ export class QuestionsService {
       where: { id },
       data: { isActive: false },
     });
-    // Invalidate Cache
     await cache.del(`question:${id}:public`);
     await cache.del(`question:${id}:admin`);
+    invalidateTestCaseCache(id);
   }
 }
