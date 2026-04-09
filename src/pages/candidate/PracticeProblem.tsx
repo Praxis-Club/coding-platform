@@ -54,7 +54,14 @@ export const PracticeProblem = () => {
     enabled: !!userAssessmentId && secureReady,
     maxTabSwitches: 3,
     onTabSwitch: async (count) => {
-      try { await api.patch(`/assessments/${userAssessmentId}/tab-switch`); } catch {}
+      try {
+        const res = await api.patch(`/assessments/${userAssessmentId}/tab-switch`);
+        const data = res.data?.data;
+        // If backend says blocked, trigger auto-submit immediately
+        if (data?.status === 'blocked') {
+          submitSolutionRef.current();
+        }
+      } catch {}
       setSwitchCount(count);
     },
     onViolationLimit: () => { submitSolutionRef.current(); },

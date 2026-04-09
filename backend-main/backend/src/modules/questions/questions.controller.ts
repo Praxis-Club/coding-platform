@@ -56,4 +56,15 @@ export class QuestionsController {
       next(error);
     }
   }
+
+  async getBoilerplate(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const { language } = req.params;
+      const { getLanguageConfig } = await import('../executor/languages.config');
+      const config = getLanguageConfig(language);
+      res.json({ success: true, data: { language, boilerplate: config.template || '' } });
+    } catch (error: any) {
+      res.status(400).json({ success: false, error: { code: 'UNSUPPORTED_LANGUAGE', message: error.message } });
+    }
+  }
 }

@@ -322,11 +322,14 @@ export class AssessmentsService {
         passed: ua.score >= assessment.passingScore,
         startedAt: ua.startedAt,
         completedAt: ua.completedAt,
+        tabSwitches: ua.tabSwitches,
       })),
     };
   }
 
   async updateTabSwitches(userAssessmentId: string, userId: string) {
+    const MAX_TAB_SWITCHES = 3;
+
     const userAssessment = await prisma.userAssessment.findUnique({
       where: { id: userAssessmentId },
     });
@@ -335,14 +338,57 @@ export class AssessmentsService {
       throw new AppError(404, 'ASSESSMENT_NOT_FOUND', 'Assessment not found');
     }
 
+    if (userAssessment.status === 'completed') {
+      return { tabSwitches: userAssessment.tabSwitches, status: 'blocked', message: 'Assessment already completed' };
+    }
+
     const updated = await prisma.userAssessment.update({
       where: { id: userAssessmentId },
-      data: {
-        tabSwitches: { increment: 1 },
-      },
+      data: { tabSwitches: { increment: 1 } },
     });
 
-    return updated;
+    const count = updated.tabSwitches;
+
+    if (count >= MAX_TAB_SWITCHES) {
+      // Auto-lock: mark as completed
+      await prisma.userAssessment.update({
+        where: { id: userAssessmentId },
+        data: { status: 'completed', completedAt: new Date() },
+      });
+      return { tabSwitches: count, status: 'blocked', message: 'Maximum tab switches exceeded. Test auto-submitted.' };
+    }
+
+    const remaining = MAX_TAB_SWITCHES - count;
+    return {
+      tabSwitches: count,
+      status: count === MAX_TAB_SWITCHES - 1 ? 'warning' : 'ok',
+      remaining,
+      message: count === MAX_TAB_SWITCHES - 1
+        ? `Final warning: 1 more switch will auto-submit your test.`
+        : `Tab switch recorded. ${remaining} remaining.`,
+    };
+  }
+
+  async logFullscreenExit(userAssessmentId: string, userId: string) {
+    const userAssessment = await prisma.userAssessment.findUnique({
+      where: { id: userAssessmentId },
+    });
+
+    if (!userAssessment || userAssessment.userId !== userId) {
+      throw new AppError(404, 'ASSESSMENT_NOT_FOUND', 'Assessment not found');
+    }
+
+    // Treat fullscreen exit same as a tab switch violation
+    const updated = await prisma.userAssessment.update({
+      where: { id: userAssessmentId },
+      data: { tabSwitches: { increment: 1 } },
+    });
+
+    return {
+      tabSwitches: updated.tabSwitches,
+      violation: 'fullscreen_exit',
+      message: 'Fullscreen exit logged as a violation.',
+    };
   }
 
   async saveProgress(userAssessmentId: string, userId: string, questionId: string, code: string, language: string) {

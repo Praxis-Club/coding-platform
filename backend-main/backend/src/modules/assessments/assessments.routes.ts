@@ -16,6 +16,7 @@ router.post('/:id/assign', authorize('admin'), controller.assign);
 router.post('/:id/start', controller.start);
 router.get('/session/:id', controller.getUserAssessment);
 router.patch('/:id/tab-switch', controller.updateTabSwitches);
+router.post('/:id/fullscreen-exit', controller.logFullscreenExit);
 router.post('/progress/save', controller.saveProgress);
 router.get('/progress/get', controller.getProgress);
 

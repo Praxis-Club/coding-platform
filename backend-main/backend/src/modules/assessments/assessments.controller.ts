@@ -77,6 +77,15 @@ export class AssessmentsController {
     }
   }
 
+  async logFullscreenExit(req: AuthRequest, res: Response, next: NextFunction) {
+    try {
+      const result = await service.logFullscreenExit(req.params.id, req.user!.userId);
+      res.json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async saveProgress(req: AuthRequest, res: Response, next: NextFunction) {
     try {
       const { userAssessmentId, questionId, code, language } = req.body;

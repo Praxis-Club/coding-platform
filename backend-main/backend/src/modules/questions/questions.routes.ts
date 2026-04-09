@@ -10,6 +10,7 @@ const controller = new QuestionsController();
 router.use(authenticate);
 
 router.post('/', authorize('admin'), validate(createQuestionSchema), controller.create);
+router.get('/boilerplate/:language', controller.getBoilerplate);
 router.get('/', controller.getAll);
 router.get('/:id', controller.getById);
 router.put('/:id', authorize('admin'), validate(updateQuestionSchema), controller.update);
