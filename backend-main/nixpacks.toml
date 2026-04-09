@@ -1,8 +1,8 @@
 [phases.setup]
-nixpkgs = ["nodejs", "gcc", "g++", "openjdk", "python3"]
+nixpkgs = ["nodejs_20", "gcc", "g++", "openjdk", "python3"]
 
 [phases.build]
-cmds = ["npm install", "npm run build"]
+cmds = ["cd backend && npm install", "cd backend && npm run build"]
 
 [phases.start]
-cmd = "npm run start"
+cmd = "cd backend && npm run start"
