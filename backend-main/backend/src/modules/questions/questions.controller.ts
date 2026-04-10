@@ -22,6 +22,7 @@ export class QuestionsController {
         limit: limit ? parseInt(limit as string) : undefined,
         difficulty: difficulty as string,
         tags: tags ? (tags as string).split(',') : undefined,
+        role: req.user?.role,
       });
       res.json({ success: true, ...result });
     } catch (error) {

@@ -330,6 +330,15 @@ export const PracticeProblem = () => {
 
   return (
     <>
+    {/* ── Secure Test Overlay — MUST be before blurred div to escape stacking context ── */}
+    <SecureTestOverlay
+      warning={warning}
+      isLocked={isLocked}
+      tabSwitchCount={tabSwitchCount}
+      maxTabSwitches={3}
+      onReenterFullscreen={requestFullscreen}
+      onDismiss={dismissWarning}
+    />
     <div
       className="h-screen flex flex-col bg-base overflow-hidden"
       style={{
@@ -719,15 +728,6 @@ export const PracticeProblem = () => {
         </div>
       </div>
     </div>
-    {/* ── Secure Test Overlay (outside blurred container) ── */}
-    <SecureTestOverlay
-      warning={warning}
-      isLocked={isLocked}
-      tabSwitchCount={tabSwitchCount}
-      maxTabSwitches={3}
-      onReenterFullscreen={requestFullscreen}
-      onDismiss={dismissWarning}
-    />
     </>
   );
 };

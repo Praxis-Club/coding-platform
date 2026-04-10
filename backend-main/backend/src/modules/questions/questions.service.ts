@@ -31,12 +31,14 @@ export class QuestionsService {
     limit?: number;
     difficulty?: string;
     tags?: string[];
+    role?: string;
   }) {
     const page = filters.page || 1;
-    const limit = filters.limit || 10;
+    const limit = filters.limit || 100; // admins need to see all
     const skip = (page - 1) * limit;
 
-    const where: any = { isActive: true };
+    const isAdmin = filters.role === 'admin';
+    const where: any = isAdmin ? {} : { isActive: true };
     
     if (filters.difficulty) {
       where.difficulty = filters.difficulty;
