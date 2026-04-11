@@ -2,6 +2,7 @@ import prisma from '../../config/database';
 import { AppError } from '../../middleware/errorHandler';
 import { Language } from '../executor/languages.config';
 import { fastExecutor, cacheTestCases, getCachedTestCases } from '../executor/fast.executor';
+import { computeXP, getLevel, updateStreak, Difficulty } from '../gamification/xp.engine';
 import { EventEmitter } from 'events';
 
 export class SubmissionsService extends EventEmitter {
@@ -454,6 +455,15 @@ export class SubmissionsService extends EventEmitter {
 
     const maxScore = question.testCases.reduce((sum, tc) => sum + tc.points, 0);
 
+    // ── First-solve detection (must run BEFORE creating the new submission) ──
+    const priorPerfect = await prisma.submission.findFirst({
+      where: { practiceUserId: data.userId, questionId: data.questionId, status: 'completed' },
+      select: { passedTests: true, totalTests: true },
+      orderBy: { submittedAt: 'desc' },
+    }).catch(() => null);
+
+    const isFirstSolve = !(priorPerfect && priorPerfect.totalTests !== null && priorPerfect.passedTests === priorPerfect.totalTests);
+
     // Create practice submission record
     const submission = await prisma.submission.create({
       data: {
@@ -471,12 +481,7 @@ export class SubmissionsService extends EventEmitter {
     const evaluationResults = await Promise.all(question.testCases.map(async (testCase) => {
       const execResult = await this.executeWithInputCompatibility(data.language as Language, data.code, testCase.input);
       const passed = execResult.success && this.compareOutputs(execResult.output, testCase.expectedOutput);
-      return {
-        testCase,
-        execResult,
-        passed,
-        pointsEarned: passed ? testCase.points : 0
-      };
+      return { testCase, execResult, passed, pointsEarned: passed ? testCase.points : 0 };
     }));
 
     let totalScore = 0;
@@ -507,16 +512,60 @@ export class SubmissionsService extends EventEmitter {
       });
     }
 
-    // Update submission with final scores
     const finalSubmission = await prisma.submission.update({
       where: { id: submission.id },
-      data: {
-        status: 'completed',
-        score: totalScore,
-        passedTests,
-        evaluatedAt: new Date(),
-      },
+      data: { status: 'completed', score: totalScore, passedTests, evaluatedAt: new Date() },
     });
+
+    // ── Gamification (non-blocking) ───────────────────────────────────────────
+    let gamification: {
+      xpEarned: number; newTotalXP: number; level: number; levelUp: boolean; streakDays: number;
+    } | undefined;
+
+    try {
+      const xpEarned = computeXP(passedTests, question.testCases.length, question.difficulty as Difficulty, isFirstSolve);
+
+      const existing = await prisma.userProgress.findUnique({ where: { userId: data.userId } });
+      const oldLevel = existing?.level ?? 1;
+      const oldXP = existing?.totalXP ?? 0;
+      const { newStreak, newLongest, newLastActiveDate } = updateStreak(
+        existing?.lastActiveDate ?? null,
+        existing?.currentStreak ?? 0,
+        existing?.longestStreak ?? 0
+      );
+
+      const newTotalXP = oldXP + xpEarned;
+      const newLevel = getLevel(newTotalXP);
+
+      await prisma.userProgress.upsert({
+        where: { userId: data.userId },
+        create: {
+          userId: data.userId,
+          totalXP: xpEarned,
+          level: getLevel(xpEarned),
+          currentStreak: newStreak,
+          longestStreak: newLongest,
+          lastActiveDate: newLastActiveDate,
+        },
+        update: {
+          totalXP: newTotalXP,
+          level: newLevel,
+          currentStreak: newStreak,
+          longestStreak: newLongest,
+          lastActiveDate: newLastActiveDate,
+        },
+      });
+
+      gamification = {
+        xpEarned,
+        newTotalXP,
+        level: newLevel,
+        levelUp: newLevel > oldLevel,
+        streakDays: newStreak,
+      };
+    } catch (err) {
+      console.error('[XP] Gamification update failed (non-blocking):', err);
+    }
 
     return {
       ...finalSubmission,
@@ -527,6 +576,7 @@ export class SubmissionsService extends EventEmitter {
       score: totalScore,
       maxScore,
       submissionResults: finalResults,
+      ...(gamification ?? {}),
     };
   }
 }

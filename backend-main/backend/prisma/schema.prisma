@@ -21,6 +21,7 @@ model User {
   createdQuestions    Question[]
   practiceSubmissions Submission[]     @relation("PracticeSubmissions")
   userAssessments     UserAssessment[]
+  userProgress        UserProgress?
 
   @@index([email])
   @@index([role])
@@ -229,4 +230,18 @@ enum TestCaseStatus {
   failed
   error
   timeout
+}
+
+model UserProgress {
+  id             String    @id @default(uuid())
+  userId         String    @unique @map("user_id")
+  totalXP        Int       @default(0) @map("total_xp")
+  level          Int       @default(1)
+  currentStreak  Int       @default(0) @map("current_streak")
+  longestStreak  Int       @default(0) @map("longest_streak")
+  lastActiveDate DateTime? @map("last_active_date")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_progress")
 }
