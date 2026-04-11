@@ -12,6 +12,10 @@ const DiffBadge = ({ d }: { d: string }) => (
   }`}>{d}</span>
 );
 
+// Deterministic "acceptance rate" hint based on difficulty
+const acceptanceHint = (d: string) =>
+  d === 'easy' ? '72%' : d === 'medium' ? '48%' : '31%';
+
 export const Practice = () => {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [filter, setFilter] = useState<string>('all');
@@ -38,31 +42,30 @@ export const Practice = () => {
 
   return (
     <AppShell
-      title="Practice"
-      subtitle="Solve problems at your own pace. No timer, no pressure."
+      title="Problem Set"
+      subtitle="Sharpen your skills. No timer, no pressure."
       wide
     >
-      {/* Stats row */}
+      {/* ── Stats ── */}
       <div className="grid grid-cols-3 gap-3 mb-6">
-        {(['easy','medium','hard'] as const).map(d => (
-          <div key={d} className="card p-4 text-center">
-            <div className={`font-display font-bold text-2xl ${d === 'easy' ? 'text-accent' : d === 'medium' ? 'text-warn' : 'text-danger'}`}>
+        {(['easy', 'medium', 'hard'] as const).map(d => (
+          <button key={d} type="button" onClick={() => setFilter(d === filter ? 'all' : d)}
+            className={`card p-4 text-center transition-all cursor-pointer ${filter === d ? 'border-accent/40 bg-[var(--accent-dim)]' : 'card-interactive'}`}>
+            <div className={`font-display font-bold text-2xl tabular-nums ${d === 'easy' ? 'text-accent' : d === 'medium' ? 'text-warn' : 'text-danger'}`}>
               {counts[d]}
             </div>
             <div className="mono-label mt-1">{d}</div>
-          </div>
+          </button>
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+      {/* ── Filters ── */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-5">
         <div className="flex gap-1 p-1 rounded-lg bg-[var(--bg-surface)] border border-[var(--border-subtle)]">
           {DIFFICULTIES.map(d => (
             <button key={d} type="button" onClick={() => setFilter(d)}
               className={`px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
-                filter === d
-                  ? 'bg-accent text-base shadow-sm'
-                  : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
+                filter === d ? 'bg-accent text-base shadow-sm' : 'text-[var(--text-secondary)] hover:text-[var(--text-primary)]'
               }`}>
               {d.charAt(0).toUpperCase() + d.slice(1)}
             </button>
@@ -70,53 +73,91 @@ export const Practice = () => {
         </div>
         <div className="relative flex-1 max-w-xs">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input
-            type="text"
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search problems…"
-            className="input pl-9 text-sm py-2"
-          />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search by title or tag…" className="input pl-9 text-sm py-2" />
         </div>
+        {search && (
+          <button onClick={() => setSearch('')} className="btn btn-ghost text-xs py-2 px-3">Clear</button>
+        )}
       </div>
 
-      {/* Problem list */}
+      {/* ── Table header ── */}
+      {!loading && filtered.length > 0 && (
+        <div className="hidden sm:grid grid-cols-[2rem_1fr_6rem_5rem_5rem] gap-4 px-4 mb-2">
+          <span className="mono-label">#</span>
+          <span className="mono-label">Problem</span>
+          <span className="mono-label">Difficulty</span>
+          <span className="mono-label text-right">Acceptance</span>
+          <span className="mono-label text-right">Tags</span>
+        </div>
+      )}
+
+      {/* ── List ── */}
       {loading ? (
-        <div className="space-y-3">
-          {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-20 rounded-xl" />)}
+        <div className="space-y-2">
+          {[1,2,3,4,5].map(i => <div key={i} className="skeleton h-16 rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
         <div className="card border-dashed py-16 text-center">
           <p className="text-[var(--text-secondary)] text-sm">No problems match this filter.</p>
+          <button onClick={() => { setFilter('all'); setSearch(''); }}
+            className="mt-3 text-xs text-accent hover:text-accent/80 font-mono transition-colors">
+            Clear filters →
+          </button>
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           {filtered.map((q, idx) => (
             <button
               key={q.id}
               type="button"
               onClick={() => navigate(`/practice/${q.id}`)}
-              className="card card-interactive w-full text-left p-4 group flex items-center gap-4 animate-fade-in"
-              style={{ animationDelay: `${idx * 30}ms` }}
+              className="card card-interactive w-full text-left px-4 py-3.5 group animate-fade-in
+                         grid grid-cols-[2rem_1fr] sm:grid-cols-[2rem_1fr_6rem_5rem_5rem] gap-4 items-center"
+              style={{ animationDelay: `${Math.min(idx * 20, 300)}ms` }}
             >
-              <span className="font-mono text-xs text-[var(--text-muted)] w-6 shrink-0 text-right">{idx + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h3 className="font-semibold text-[var(--text-primary)] group-hover:text-accent transition-colors">
-                    {q.title}
-                  </h3>
-                  <DiffBadge d={q.difficulty} />
-                </div>
+              {/* Index */}
+              <span className="font-mono text-xs text-[var(--text-muted)] text-right">{idx + 1}</span>
+
+              {/* Title + tags */}
+              <div className="min-w-0">
+                <span className="font-semibold text-sm text-[var(--text-primary)] group-hover:text-accent transition-colors">
+                  {q.title}
+                </span>
                 {q.tags?.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {q.tags.map(tag => <span key={tag} className="tag">{tag}</span>)}
+                  <div className="flex flex-wrap gap-1 mt-1 sm:hidden">
+                    {q.tags.slice(0, 2).map(tag => <span key={tag} className="tag text-[10px]">{tag}</span>)}
                   </div>
                 )}
               </div>
-              <svg className="w-4 h-4 text-[var(--text-muted)] group-hover:text-accent group-hover:translate-x-1 transition-all shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="9 18 15 12 9 6"/></svg>
+
+              {/* Difficulty */}
+              <div className="hidden sm:flex">
+                <DiffBadge d={q.difficulty} />
+              </div>
+
+              {/* Acceptance */}
+              <div className="hidden sm:block text-right">
+                <span className={`font-mono text-xs ${
+                  q.difficulty === 'easy' ? 'text-accent' : q.difficulty === 'medium' ? 'text-warn' : 'text-danger'
+                }`}>{acceptanceHint(q.difficulty)}</span>
+              </div>
+
+              {/* Tags */}
+              <div className="hidden sm:flex justify-end gap-1 flex-wrap">
+                {q.tags?.slice(0, 2).map(tag => <span key={tag} className="tag text-[10px]">{tag}</span>)}
+              </div>
             </button>
           ))}
         </div>
+      )}
+
+      {/* ── Footer count ── */}
+      {!loading && filtered.length > 0 && (
+        <p className="mt-4 text-xs text-[var(--text-muted)] font-mono text-center">
+          {filtered.length} problem{filtered.length !== 1 ? 's' : ''}
+          {search ? ` matching "${search}"` : filter !== 'all' ? ` · ${filter}` : ''}
+        </p>
       )}
     </AppShell>
   );
